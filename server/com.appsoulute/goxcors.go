@@ -33,11 +33,21 @@ func init() {
 }
 
 func runProxy(client *http.Client, r *http.Request, c Context) string {
-	query := r.URL.Query()
+	// This will cause http.Request to parse POST body
+	r.ParseForm()
+
+	// Form contains the parsed form data, including both the URL
+	// field's query parameters and the POST or PUT form data.
+	// This field is only available after ParseForm is called.
+	// The HTTP client ignores Form and uses Body instead.
+	query := r.Form
+
 	var req *http.Request
 	var err error
+
 	req, err = http.NewRequest(query["method"][0], query["url"][0], r.Body)
-	req.Header.Add("user-agent", "Mozilla/5.0 (X11; Linux x86_64; rv:5.0) Gecko/20100101 Firefox/5.0)")
+	req.Header.Add("User-Agent", r.Header["User-Agent"][0])
+
 	for _, v := range query["header"] {
 		kv := strings.Split(v, "|")
 		if len(kv) < 2 {
@@ -46,13 +56,14 @@ func runProxy(client *http.Client, r *http.Request, c Context) string {
 		}
 		if strings.ToLower(kv[0]) == "user-agent" {
 			c.Infof("set user-agent to %s", kv[1])
-			req.Header.Del("user-agent")
+			req.Header.Del("User-Agent")
 		}
 		req.Header.Add(kv[0], kv[1])
 	}
 
 	resp, err := client.Do(req)
-	defer resp.Body.Close()
+	defer resp.Body.Close() // FIXME: This will "nil pointer dereference" error
+							// when the client.Do(req) call fails
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		c.Errorf("Response Error : %q ", err)
